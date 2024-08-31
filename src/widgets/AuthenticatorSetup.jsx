@@ -58,7 +58,9 @@ const AuthenticatorSetup = ({ userEmail, onContinue }) => {
   };
 
   const handleProceed = () => {
-    onContinue();
+    console.log("Proceed button clicked");
+    window.location.reload()
+    onContinue();  // This will navigate to the home view
   };
 
   return (
@@ -267,3 +269,4 @@ const AuthenticatorSetup = ({ userEmail, onContinue }) => {
 };
 
 export default AuthenticatorSetup;
+

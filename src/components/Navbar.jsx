@@ -71,7 +71,7 @@ const Navbar = () => {
   const isProfileMenuOpen = Boolean(profileAnchorEl);
 
   return (
-    <AppBar position="fixed" sx={{ boxShadow: 'none', padding: '0 20px', background: 'linear-gradient(135deg, #6e8efb, #a777e3)', fontFamily: 'Roboto, sans-serif' }}>
+    <AppBar position="fixed" sx={{zIndex: (theme) => theme.zIndex.drawer + 1, boxShadow: 'none', padding: '0 20px', background: 'linear-gradient(135deg, #6e8efb, #a777e3)', fontFamily: 'Roboto, sans-serif' }}>
       <Toolbar sx={{ justifyContent: 'space-between', alignItems: 'center' }}>
         {/* Left Side: Logo and Search Bar */}
         <Box sx={{ display: 'flex', alignItems: 'center' }}>

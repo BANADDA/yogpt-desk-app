@@ -28,7 +28,7 @@ const StatusIcon = ({ status }) => {
     );
   };
 
-const RecentFiles = () => {
+const RecentFiles = ({onCashOutClick}) => {
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [recentFilesData, setRecentFilesData] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -105,6 +105,7 @@ const RecentFiles = () => {
               textTransform: 'none',
               backgroundColor: '#006400'
             }}
+            onClick={onCashOutClick}
           >
             CASH-OUT
           </Button>

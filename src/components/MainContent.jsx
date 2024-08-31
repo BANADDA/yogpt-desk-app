@@ -1,884 +1,353 @@
-import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline'; // Import an icon for the new card
-import { Box, Button, Card, CardContent, Container, Divider, Grid, Typography } from '@mui/material';
+import { Box, Button, Card, CardContent, CircularProgress, Divider, Grid, Link as MuiLink, Typography } from '@mui/material';
+import { collection, getDocs, getFirestore, query, where } from 'firebase/firestore';
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom'; // Import useNavigate hook
-import { toast, ToastContainer } from 'react-toastify'; // Import toast components
-import 'react-toastify/dist/ReactToastify.css';
-import { auth, signInWithGoogle } from '../auth/config/firebase-config'; // import signInWithGoogle function
-import PopUp from '../widgets/LoginPopUp';
-import NewPopup from '../widgets/ServicesPopUp';
-import ModelCard from './ModelCard'; // Import the ModelCard component
-import ModelDetailsModal from './ModelDetailsModal';
+import { auth, signInWithGoogle } from '../auth/config/firebase-config';
+import AuthenticatorSetup from '../widgets/AuthenticatorSetup';
+import MinerAccount from '../widgets/MinerAccount';
+import RecentFiles from '../widgets/RecentFiles';
+import TransactionHistory from '../widgets/TransactionHistory';
+import ProjectCard from './ProjectCard';
+import ResourcesOverviewCard from './ResourcesOverviewCard';
+import TerminalController from './Terminal';
 
-const networks = [
-  {
-    name: 'Commune',
-    description: 'Community-driven AI platform',
-    icon: 'https://avatars.githubusercontent.com/u/107713514?v=4',
-    comingSoon: false,
-  },
-  {
-    name: 'Bittensor',
-    description: 'Decentralized AI network',
-    icon: 'https://bittensor.com/favicon.ico',
-    comingSoon: true,
-  },
-  {
-    name: 'Hugging Face',
-    description: 'Open-source NLP models',
-    icon: 'https://huggingface.co/favicon.ico',
-    comingSoon: true,
-  },
-  {
-    name: 'OpenAI',
-    description: 'State-of-the-art language models',
-    icon: 'https://openai.com/favicon.ico',
-    comingSoon: true,
-  },
-];
-
-const models = [
-  {
-    name: 'GPT2 ',
-    id: 'openai-community/gpt2',
-    description: 'Text Generation',
-    lastUsed: '3 hours ago',
-    usageCount: '339k',
-  },
-  {
-    name: 'GPT-2 Medium',
-    id: 'openai-community/gpt2-medium',
-    description: 'Text Generation',
-    lastUsed: '5 days ago',
-    usageCount: '48.5k',
-  },
-  {
-    name: 'GPT-2 Large',
-    id: 'openai-community/gpt2-large',
-    description: 'Text Generation',
-    lastUsed: '3 hours ago',
-    usageCount: '17.7k',
-  },
-  {
-    name: 'OpenELM 270M',
-    id: 'apple/OpenELM-270M',
-    description: 'Text Generation',
-    lastUsed: '21 hours ago',
-    usageCount: '84.8k',
-  },
-  {
-    name: 'OpenELM 450M',
-    id: 'apple/OpenELM-450M',
-    description: 'Text Generation',
-    lastUsed: '4 days ago',
-    usageCount: '3.47k',
-  },
-  {
-    name: 'OpenELM 3B',
-    id: 'apple/OpenELM-3B',
-    description: 'Text Generation',
-    lastUsed: '3 days ago',
-    usageCount: '77.8k',
-  },
-  {
-    name: 'NousResearch llama2',
-    id: 'NousResearch/Llama-2-7b-chat-hf',
-    description: 'Text Generation',
-    lastUsed: '5 days ago',
-    usageCount: '616',
-  },
-  {
-    name: 'LLaMA-3.1 8B',
-    id: 'unsloth/llama-3-8b-bnb-4bit',
-    description: 'Text Generation',
-    lastUsed: '3 hours ago',
-    usageCount: '66.1k',
-  },
-  {
-    name: 'Gemini ',
-    id: 'google/gemma-2b',
-    description: 'Text Generation',
-    lastUsed: '3 hours ago',
-    usageCount: '66.1k',
-  },
-  // Replacing the last model with a "Submit Your Model" card
-  {
-    name: 'Submit Your Model',
-    id: 'submit-your-model',
-    description: 'Have a model to share? Submit it to us!',
-    icon: 'add_circle_outline',
-    link: 'https://forms.gle/your-google-form-link', // Link to the Google Form
-  },
-];
+// Initialize Firestore
+const db = getFirestore();
 
 const MainContent = () => {
   const [user, setUser] = useState(null);
-  const [open, setOpen] = useState(false);
-  const [newPopupOpen, setNewPopupOpen] = useState(false);
-  const [filter, setFilter] = useState('');
-  const [selectedModel, setSelectedModel] = useState(null);
-  const navigate = useNavigate(); // Initialize navigate hook
+  const [isMiner, setIsMiner] = useState(null);
+  const [minerWalletId, setMinerWalletId] = useState(null);
+  const [completedJobCount, setCompletedJobCount] = useState(0);
+  const [currentView, setCurrentView] = useState('home');
+  const [programStatus, setProgramStatus] = useState('offline'); // State for program status
 
   useEffect(() => {
-    const unsubscribe = auth.onAuthStateChanged(setUser);
+    const unsubscribe = auth.onAuthStateChanged(async (currentUser) => {
+      if (currentUser) {
+        setUser(currentUser);
+        await checkMinerAccount(currentUser.email);
+        const jobIds = await fetchTrainingJobsByUser(currentUser.uid);
+        const jobCount = await countCompletedJobs(jobIds);
+        setCompletedJobCount(jobCount);
+      } else {
+        handleLogin();
+      }
+    });
+
     return () => unsubscribe();
   }, []);
 
-  const handleGetStartedClick = () => {
-    if (user) {
-      setNewPopupOpen(true);
-    } else {
-      setOpen(true);
-    }
+  const handleLogin = () => {
+    signInWithGoogle()
+      .then((result) => {
+        setUser(result.user);
+        window.location.reload();
+      })
+      .catch((error) => {
+        console.error('Error signing in: ', error);
+      });
   };
 
-  const handleClose = () => {
-    setOpen(false);
-  };
+  const checkMinerAccount = async (email) => {
+    try {
+      const minersRef = collection(db, 'miners');
+      const q = query(minersRef, where('email', '==', email));
+      const querySnapshot = await getDocs(q);
 
-  const handleNewPopupClose = () => {
-    setNewPopupOpen(false);
-  };
-
-  const handleFilterChange = (event) => {
-    setFilter(event.target.value);
-  };
-
-  const handleCardClick = (network) => {
-    if (network.name === 'Commune') {
-      if (!user) {
-        signInWithGoogle()
-          .then((result) => {
-            setUser(result);
-            navigate('/com'); // Navigate to /com after successful login
-          })
-          .catch((error) => {
-            console.error('Google sign-in error', error);
-          });
+      if (!querySnapshot.empty) {
+        const minerData = querySnapshot.docs[0].data();
+        setIsMiner(true);
+        setMinerWalletId(minerData.ethereumAddress);
+        setProgramStatus('online'); // Assume program is online if miner account exists
       } else {
-        navigate('/com'); // Directly navigate if already logged in
+        setIsMiner(false);
+        setProgramStatus('offline');
       }
-    } else if (!network.comingSoon) {
-      alert(`${network.name} Selected`);
+    } catch (error) {
+      console.error('Error checking miner account:', error);
+      setIsMiner(false);
+      setProgramStatus('offline');
     }
   };
 
-  const handleModelCardClick = (model) => {
-    if (model.id === 'submit-your-model') {
-      window.open(model.link, '_blank'); // Open the Google Form link in a new tab
-    } else if (!user) {
-      signInWithGoogle()
-        .then((result) => {
-          setUser(result);
-          setSelectedModel(model);
-        })
-        .catch((error) => {
-          console.error('Google sign-in error', error);
-        });
-    } else {
-      setSelectedModel(model);
+  const fetchTrainingJobsByUser = async (userId) => {
+    const trainingJobsRef = collection(db, 'training_jobs');
+    const q = query(trainingJobsRef, where('userId', '==', userId));
+    const querySnapshot = await getDocs(q);
+    
+    const jobIds = querySnapshot.docs.map(doc => doc.id);
+    return jobIds;
+  };
+
+  const countCompletedJobs = async (jobIds) => {
+    const completedJobsRef = collection(db, 'completed_jobs');
+    let completedJobCount = 0;
+
+    for (const jobId of jobIds) {
+      const q = query(completedJobsRef, where('jobId', '==', jobId));
+      const querySnapshot = await getDocs(q);
+      completedJobCount += querySnapshot.size;
     }
+
+    return completedJobCount;
   };
 
-  const handleModalClose = () => {
-    setSelectedModel(null);
+  const toggleProgramStatus = () => {
+    setProgramStatus(prevStatus => prevStatus === 'online' ? 'offline' : 'online');
   };
 
-  const filteredModels = models.filter((model) =>
-    model.name.toLowerCase().includes(filter.toLowerCase())
-  );
-
-  const showToast = () => {
-    toast.info('Coming Soon', {
-      position: "top-right", // Set position to top-right
-      autoClose: 5000,
-      hideProgressBar: false,
-      closeOnClick: true,
-      pauseOnHover: true,
-      draggable: true,
-      progress: undefined,
-    });
+  const handleShowMinerAccount = () => {
+    setCurrentView('wallet');
   };
 
-  return (
-    <Box
-      className="min-h-screen bg-gray-100"
-      sx={{
-        marginTop: '90px',
-        marginBottom: '90px',
-        minHeight: '80vh',
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        width: '100%',
-        flexDirection: 'column',
-      }}
-    >
-      <Container maxWidth="lg">
-        <Typography
-          variant="h3"
-          align="center"
-          color="textPrimary"
-          gutterBottom
-          style={{ fontSize: '2.0rem', fontWeight: '700' }}
-        >
-          Fine-Tune Your Own GPT
-        </Typography>
-        <Typography
-          variant="h6"
-          align="center"
-          color="textSecondary"
-          gutterBottom
-          style={{ fontSize: '1.4rem', fontWeight: '700', marginBottom: '15px' }}
-        >
-          Share Your GPU and Earn Tokens
-        </Typography>
-        <Typography
-          variant="h6"
-          align="center"
-          color="textSecondary"
-          gutterBottom
-          style={{ fontSize: '1.2rem', fontWeight: '500', marginBottom: '20px' }}
-        >
-          Decentralized GPU Networks
-        </Typography>
+  const handleShowRecentFiles = () => {
+    setCurrentView('trainingJobs');
+  };
 
-        <Grid container spacing={4} justifyContent="center" alignItems="center">
-          {networks.map((network, index) => (
-            <Grid item xs={12} sm={6} md={3} key={network.name}>
-              <Card
-                onClick={() => handleCardClick(network)}
-                sx={{
-                  height: 200,
-                  background: 'linear-gradient(135deg, #6e8efb, #a777e3)',
-                  color: '#fff',
-                  cursor: network.comingSoon ? 'default' : 'pointer',
-                  position: 'relative',
-                  '&:hover': {
-                    transform: network.comingSoon ? 'none' : 'translateY(-5px)',
-                    boxShadow: network.comingSoon
-                      ? 'none'
-                      : '0 6px 12px rgba(0, 0, 0, 0.15)',
-                  },
-                  filter: network.comingSoon ? 'brightness(50%)' : 'none',
-                }}
+  const handleViewTransactionHistory = () => {
+    setCurrentView('transactionHistory');
+  };
+
+  const handleCashOutClick = () => {
+    setCurrentView('wallet');
+  };
+
+  const handleShowHome = () => {
+    setCurrentView('home');
+  };
+
+  if (user && isMiner === false) {
+    return (
+      <AuthenticatorSetup userEmail={user.email} onContinue={handleShowHome} />
+    );
+  }
+
+  if (user && isMiner) {
+    return (
+      <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+        <Box
+          className="min-h-screen bg-gray-100"
+          sx={{
+            flexGrow: 1,
+            paddingX: '100px',
+            marginTop: '90px',
+            marginBottom: '90px',
+            minHeight: '100vh',
+            display: 'flex',
+            flexDirection: 'column',
+          }}
+        >
+          {/* Header Section */}
+          <Box
+            sx={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: '20px',
+            }}
+          >
+            <Box>
+              <Typography
+                variant="h5"
+                sx={{ fontWeight: '600', color: '#4A4A4A' }}
               >
-                <CardContent align="center">
-                  {network.icon.startsWith('http') ? (
-                    <img
-                      src={network.icon}
-                      alt={network.name}
-                      style={{ width: '80px', height: '80px', marginBottom: '10px' }}
-                    />
-                  ) : (
-                    <i className={`${network.icon} fa-6x mb-4`}></i>
-                  )}
-                  <Typography variant="h5" component="div">
-                    {network.name}
+                Dashboard
+              </Typography>
+              <Typography variant="body1" sx={{ color: '#6B6B6B' }}>
+                Hi {user ? user.displayName : 'Guest Miner'}, welcome to the YoGPT Miner Dashboard!
+              </Typography>
+            </Box>
+          </Box>
+          <Divider sx={{ mb: 3, borderWidth: '1px' }} />
+
+          {/* Breadcrumb Navigation */}
+          <Box sx={{ marginBottom: '20px' }}>
+            <Typography variant="body2" sx={{ color: '#757575' }}>
+              {currentView === 'home' ? (
+                <MuiLink
+                  component="button"
+                  variant="body5"
+                  onClick={handleShowHome}
+                  sx={{ fontWeight: '600', color: '#3f51b5', textDecoration: 'none' }}
+                >
+                  Home
+                </MuiLink>
+              ) : currentView === 'trainingJobs' ? (
+                <>
+                  <MuiLink
+                    component="button"
+                    variant="body5"
+                    onClick={handleShowHome}
+                    sx={{ fontWeight: '600', color: '#3f51b5', textDecoration: 'none' }}
+                  >
+                    Home
+                  </MuiLink>
+                  {' > '}
+                  <MuiLink
+                    component="button"
+                    variant="body5"
+                    onClick={handleShowRecentFiles}
+                    sx={{ fontWeight: '600', color: '#3f51b5', textDecoration: 'none' }}
+                  >
+                    Training Jobs
+                  </MuiLink>
+                </>
+              ) : currentView === 'wallet' ? (
+                <>
+                  <MuiLink
+                    component="button"
+                    variant="body5"
+                    onClick={handleShowHome}
+                    sx={{ fontWeight: '600', color: '#3f51b5', textDecoration: 'none' }}
+                  >
+                    Home
+                  </MuiLink>
+                  {' > '}
+                  <Typography
+                    component="span"
+                    variant="body2"
+                    sx={{ color: '#757575' }}
+                  >
+                    Miner Account
                   </Typography>
-                  <Typography variant="body2">{network.description}</Typography>
-                  {network.comingSoon && (
+                </>
+              ) : currentView === 'transactionHistory' ? (
+                <>
+                  <MuiLink
+                    component="button"
+                    variant="body5"
+                    onClick={handleShowHome}
+                    sx={{ fontWeight: '600', color: '#3f51b5', textDecoration: 'none' }}
+                  >
+                    Home
+                  </MuiLink>
+                  {' > '}
+                  <Typography
+                    component="span"
+                    variant="body2"
+                    sx={{ color: '#757575' }}
+                  >
+                    Transaction History
+                  </Typography>
+                </>
+              ) : null}
+            </Typography>
+          </Box>
+
+          {/* Conditionally Render Content */}
+          {currentView === 'home' ? (
+            <Grid container spacing={3}>
+              <Grid item xs={12} md={12}>
+                <ProjectCard
+                  user={{ name: user ? user.displayName : 'Guest Miner', email: user ? user.email : ' ' }}
+                  commit={minerWalletId}
+                  applications={completedJobCount.toString()}
+                  programStatus={programStatus}
+                  onToggleProgram={toggleProgramStatus}
+                />
+              </Grid>
+              <Grid item xs={12} md={6}>
+                {/* Resources Overview */}
+                <ResourcesOverviewCard
+                  title="Miner Memory Usage Overview"
+                  dateRange="Monitoring memory consumed by miner"
+                  activeTitle="Disk Space Used"
+                  activeValue={894}
+                  inactiveTitle="RAM Usage"
+                  inactiveValue={341}
+                  totalTitle="Total Memory Usage"
+                />
+              </Grid>
+              <Grid item xs={12} md={6}>
+                {/* Applications Overview */}
+                <ResourcesOverviewCard
+                  title="Training Jobs"
+                  dateRange="Monitoring training jobs"
+                  activeTitle="Completed Jobs"
+                  activeValue={100}
+                  inactiveTitle="Failed Jobs"
+                  inactiveValue={10}
+                  totalTitle="Total jobs"
+                  buttonText="Monitor Jobs"
+                  buttonLink="#"
+                  onClick={handleShowRecentFiles}
+                />
+              </Grid>
+              <Grid item xs={12} md={8}>
+                <Card sx={{ height: '100%', padding: 0 }}>
+                  <TerminalController />
+                </Card>
+              </Grid>
+              <Grid item xs={12} md={4}>
+                <Card>
+                  <CardContent>
+                    <Box
+                      sx={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        marginBottom: '20px',
+                      }}
+                    >
+                      <Typography
+                        variant="h6"
+                        sx={{ fontWeight: '600', color: '#444' }}
+                      >
+                        Miner Tokens
+                      </Typography>
+                      <Button variant="outlined" onClick={handleShowMinerAccount}>
+                        Miner Account
+                      </Button>
+                    </Box>
                     <Typography
                       variant="body2"
-                      style={{ color: '#ffd700', marginTop: '5px' }}
+                      sx={{ color: '#757575', marginBottom: '20px' }}
                     >
-                      Coming Soon
+                      Available YoGPT tokens
                     </Typography>
-                  )}
-                </CardContent>
-              </Card>
-            </Grid>
-          ))}
-        </Grid>
-
-        <Divider sx={{ mt: 6, color: '#280821', borderBottomWidth: 3 }} >
-        <Typography
-          variant="h1"
-          align="center"
-          color="textPrimary"
-          gutterBottom
-          style={{ fontSize: '1.5rem', fontWeight: '700'}}
-        >
-          Start Your Fine-Tuning Job
-        </Typography>
-        </Divider>
-        <Typography
-          variant="h6"
-          align="center"
-          color="textSecondary"
-          gutterBottom
-          style={{ fontSize: '1.3rem', fontWeight: '700', marginBottom: '15px' }}
-        >
-          Choose Your Base Model
-        </Typography>
-        <Grid container spacing={2} justifyContent="center" alignItems="center">
-          {filteredModels.map((model) => (
-            <Grid item xs={12} sm={6} md={4} lg={4} key={model.id}>
-              {model.id === 'submit-your-model' ? (
-                <Card
-                  sx={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    justifyContent: 'space-between',
-                    background: 'linear-gradient(135deg, #6e8efb, #BB89F7)', // Gradient background
-                    color: '#fff', // Set text color to white
-                    cursor: 'pointer',
-                    marginBottom: '15px',
-                    '&:hover': {
-                      transform: 'translateY(-5px)',
-                      boxShadow: '0 6px 12px rgba(0, 0, 0, 0.15)',
-                    },
-                  }}
-                  onClick={showToast}
-                >
-                  <CardContent>
-                    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                      <AddCircleOutlineIcon sx={{ fontSize: 25, color: '#fff', marginBottom: 0 }} />
-                      <Typography variant="h8" component="div" gutterBottom sx={{ fontWeight: 'bold' }}>
-                        {model.name}
+                    <Typography
+                      variant="h5"
+                      sx={{ fontWeight: '600', marginBottom: '10px' }}
+                    >
+                      15
+                    </Typography>
+                    <Divider sx={{ marginBottom: '20px' }} />
+                    <Button variant="contained" onClick={handleViewTransactionHistory} sx={{ textTransform: 'none', background: "#a777e3" }}>
+                      View Transaction History
+                    </Button>
+                    <Divider sx={{ marginTop: '20px' }} />
+                    <Box sx={{ marginTop: '20px' }}>
+                      <Typography variant="body2" sx={{ color: '#757575', marginBottom: '10px' }}>
+                        Tips
                       </Typography>
-                      <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
-                        {model.description}
+                      <Typography variant="body2" sx={{ color: '#757575', marginBottom: '1px' }}>
+                        For the safety of your funds, the customer service may contact you by phone to confirm your withdrawal request. Please pay attention to incoming calls.
+                      </Typography>
+                      <Typography variant="body2" sx={{ color: '#757575', }}>
+                        Ensure the security of your computer and browser to prevent information from being tampered with or leaked.
                       </Typography>
                     </Box>
                   </CardContent>
-                  <Box sx={{ display: 'flex', justifyContent: 'center', }}>
-                    <Button
-                      variant="outlined"
-                      style={{ backgroundColor: '#E8D6FE', borderColor: 'white' }}
-                      size="small"
-                      onClick={(e) => {
-                        e.stopPropagation(); 
-                        showToast(); 
-                      }}
-                      // onClick={(e) => {
-                      //   e.stopPropagation();
-                      //   window.open(model.link, '_blank');
-                      // }}
-                      sx={{
-                        textTransform: 'none',
-                        marginBottom: '10px',
-                        fontWeight: 'bold',
-                        // color: "blueviolet"
-                      }}
-                    >
-                      Submit Model
-                    </Button>
-                  </Box>
                 </Card>
-              ) : (
-                <ModelCard model={model} onClick={() => handleModelCardClick(model)} />
-              )}
+              </Grid>
             </Grid>
-          ))}
-        </Grid>
+          ) : currentView === 'wallet' ? (
+            <MinerAccount />  // Render MinerAccount component when currentView is 'wallet'
+          ) : currentView === 'transactionHistory' ? (
+            <TransactionHistory />  // Render TransactionHistory component when currentView is 'transactionHistory'
+          ) : (
+            <RecentFiles onCashOutClick={handleCashOutClick} />  // Render RecentFiles component when currentView is 'trainingJobs'
+          )}
+        </Box>
+      </Box>
+    );
+  }
 
-
-      </Container>
-      <ToastContainer />
-      <PopUp open={open} onClose={handleClose} />
-      <NewPopup open={newPopupOpen} onClose={handleNewPopupClose} />
-      {selectedModel && (
-        <ModelDetailsModal
-          open={!!selectedModel}
-          onClose={handleModalClose}
-          model={selectedModel}
-        />
-      )}
+  return (
+    <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
+      <CircularProgress />
     </Box>
   );
 };
 
 export default MainContent;
-
-// import { Box, Card, CardContent, Container, Grid, Typography } from '@mui/material';
-// import React, { useEffect, useState } from 'react';
-// import { useNavigate } from 'react-router-dom'; // Import useNavigate hook
-// import { auth, signInWithGoogle } from '../auth/config/firebase-config'; // import signInWithGoogle function
-// import PopUp from '../widgets/LoginPopUp';
-// import NewPopup from '../widgets/ServicesPopUp';
-// import ModelCard from './ModelCard'; // Import the ModelCard component
-// import ModelDetailsModal from './ModelDetailsModal';
-
-// const networks = [
-//   {
-//     name: 'Commune',
-//     description: 'Community-driven AI platform',
-//     icon: 'https://avatars.githubusercontent.com/u/107713514?v=4',
-//     comingSoon: false,
-//   },
-//   {
-//     name: 'Bittensor',
-//     description: 'Decentralized AI network',
-//     icon: 'https://bittensor.com/favicon.ico',
-//     comingSoon: true,
-//   },
-//   {
-//     name: 'Hugging Face',
-//     description: 'Open-source NLP models',
-//     icon: 'https://huggingface.co/favicon.ico',
-//     comingSoon: true,
-//   },
-//   {
-//     name: 'OpenAI',
-//     description: 'State-of-the-art language models',
-//     icon: 'https://openai.com/favicon.ico',
-//     comingSoon: true,
-//   },
-// ];
-
-// const models = [
-//   {
-//     name: 'GPT2 ',
-//     id: 'openai-community/gpt2',
-//     description: 'Text Generation',
-//     lastUsed: '3 hours ago',
-//     usageCount: '339k'
-//   },
-//   {
-//     name: 'GPT-2 Medium',
-//     id: 'openai-community/gpt2-medium',
-//     description: 'Text Generation',
-//     lastUsed: '5 days ago',
-//     usageCount: '48.5k'
-//   },
-//   {
-//     name: 'GPT-2 Large',
-//     id: 'openai-community/gpt2-large',
-//     description: 'Text Generation',
-//     lastUsed: '3 hours ago',
-//     usageCount: '17.7k'
-//   },
-//   {
-//     name: 'OpenELM 270M',
-//     id: 'apple/OpenELM-270M',
-//     description: 'Text Generation',
-//     lastUsed: '21 hours ago',
-//     usageCount: '84.8k'
-//   },
-//   {
-//     name: 'OpenELM 450M',
-//     id: 'apple/OpenELM-450M',
-//     description: 'Text Generation',
-//     lastUsed: '4 days ago',
-//     usageCount: '3.47k'
-//   },
-//   {
-//     name: 'OpenELM 3B',
-//     id: 'apple/OpenELM-3B',
-//     description: 'Text Generation',
-//     lastUsed: '3 days ago',
-//     usageCount: '77.8k'
-//   },
-//   {
-//     name: 'NousResearch llama2',
-//     id: 'NousResearch/Llama-2-7b-chat-hf',
-//     description: 'Text Generation',
-//     lastUsed: '5 days ago',
-//     usageCount: '616'
-//   },
-//   {
-//     name: 'LLaMA-3.1 8B',
-//     id: 'unsloth/llama-3-8b-bnb-4bit',
-//     description: 'Text Generation',
-//     lastUsed: '3 hours ago',
-//     usageCount: '66.1k'
-//   },
-//   {
-//     name: 'LLaMA-2 13B',
-//     id: 'openlm-research/open_llama_13b',
-//     description: 'Text Generation',
-//     lastUsed: '17 days ago',
-//     usageCount: '121k'
-//   },
-// ];
-
-// const MainContent = () => {
-//   const [user, setUser] = useState(null);
-//   const [open, setOpen] = useState(false);
-//   const [newPopupOpen, setNewPopupOpen] = useState(false);
-//   const [filter, setFilter] = useState('');
-//   const [selectedModel, setSelectedModel] = useState(null);
-//   const navigate = useNavigate(); // Initialize navigate hook
-
-//   useEffect(() => {
-//     const unsubscribe = auth.onAuthStateChanged(setUser);
-//     return () => unsubscribe();
-//   }, []);
-
-//   const handleGetStartedClick = () => {
-//     if (user) {
-//       setNewPopupOpen(true);
-//     } else {
-//       setOpen(true);
-//     }
-//   };
-
-//   const handleClose = () => {
-//     setOpen(false);
-//   };
-
-//   const handleNewPopupClose = () => {
-//     setNewPopupOpen(false);
-//   };
-
-//   const handleFilterChange = (event) => {
-//     setFilter(event.target.value);
-//   };
-
-//   const handleCardClick = (network) => {
-//     if (network.name === 'Commune') {
-//       if (!user) {
-//         signInWithGoogle()
-//           .then((result) => {
-//             setUser(result);
-//             navigate('/com'); // Navigate to /com after successful login
-//           })
-//           .catch((error) => {
-//             console.error('Google sign-in error', error);
-//           });
-//       } else {
-//         navigate('/com'); // Directly navigate if already logged in
-//       }
-//     } else if (!network.comingSoon) {
-//       alert(`${network.name} Selected`);
-//     }
-//   };
-
-//   const handleModelCardClick = (model) => {
-//     if (!user) {
-//       signInWithGoogle()
-//         .then((result) => {
-//           setUser(result);
-//           setSelectedModel(model);
-//         })
-//         .catch((error) => {
-//           console.error('Google sign-in error', error);
-//         });
-//     } else {
-//       setSelectedModel(model);
-//     }
-//   };
-
-//   const handleModalClose = () => {
-//     setSelectedModel(null);
-//   };
-
-//   const filteredModels = models.filter(model => model.name.toLowerCase().includes(filter.toLowerCase()));
-
-//   return (
-//     <Box className="min-h-screen bg-gray-100" sx={{ marginTop: "90px", marginBottom: "90px", minHeight: '80vh', display: 'flex', justifyContent: 'center', alignItems: 'center', width: '100%', flexDirection: 'column' }}>
-//       <Container maxWidth="lg">
-//         <Typography variant="h3" align="center" color="textPrimary" gutterBottom style={{ fontSize: '2.0rem', fontWeight: '700' }}>
-//           Fine-Tune Your Own GPT
-//         </Typography>
-//         <Typography variant="h6" align="center" color="textSecondary" gutterBottom style={{ fontSize: '1.4rem', fontWeight: '700', marginBottom: '15px' }}>
-//           Share Your GPU and Earn Tokens
-//         </Typography>
-//         <Typography variant="h6" align="center" color="textSecondary" gutterBottom style={{ fontSize: '1.2rem', fontWeight: '500', marginBottom: '20px' }}>
-//           Decentralized GPU Networks
-//         </Typography>
-
-//         <Grid container spacing={4} justifyContent="center" alignItems="center">
-//           {networks.map((network, index) => (
-//             <Grid item xs={12} sm={6} md={3} key={network.name}>
-//               <Card
-//                 onClick={() => handleCardClick(network)}
-//                 sx={{
-//                   height: 200,
-//                   background: 'linear-gradient(135deg, #6e8efb, #a777e3)',
-//                   color: '#fff',
-//                   cursor: network.comingSoon ? 'default' : 'pointer',
-//                   position: 'relative',
-//                   '&:hover': {
-//                     transform: network.comingSoon ? 'none' : 'translateY(-5px)',
-//                     boxShadow: network.comingSoon ? 'none' : '0 6px 12px rgba(0, 0, 0, 0.15)',
-//                   },
-//                   filter: network.comingSoon ? 'brightness(50%)' : 'none',
-//                 }}
-//               >
-//                 <CardContent align="center">
-//                   {network.icon.startsWith('http') ? (
-//                     <img src={network.icon} alt={network.name} style={{ width: '80px', height: '80px', marginBottom: '10px' }} />
-//                   ) : (
-//                     <i className={`${network.icon} fa-6x mb-4`}></i>
-//                   )}
-//                   <Typography variant="h5" component="div">
-//                     {network.name}
-//                   </Typography>
-//                   <Typography variant="body2">
-//                     {network.description}
-//                   </Typography>
-//                   {network.comingSoon && (
-//                     <Typography variant="body2" style={{ color: '#ffd700', marginTop: '5px' }}>
-//                       Coming Soon
-//                     </Typography>
-//                   )}
-//                 </CardContent>
-//               </Card>
-//             </Grid>
-//           ))}
-//         </Grid>
-
-//         <Typography variant="h1" align="center" color="textPrimary" gutterBottom style={{ fontSize: '1.8rem', fontWeight: '700', marginTop: '50px' }}>
-//         Start Your Fine-Tuning Job
-//         </Typography>
-//         <Typography variant="h6" align="center" color="textSecondary" gutterBottom style={{ fontSize: '1.4rem', fontWeight: '700', marginBottom: '15px' }}>
-//         Choose Your Base Model
-//         </Typography>
-
-//         <Grid container spacing={2} justifyContent="center" alignItems="center">
-//           {filteredModels.map((model) => (
-//             <Grid item xs={12} sm={6} md={4} lg={4} key={model.id}>
-//               <ModelCard model={model} onClick={() => handleModelCardClick(model)} /> {/* Use the reusable ModelCard component */}
-//             </Grid>
-//           ))}
-//         </Grid>
-//       </Container>
-
-//       <PopUp open={open} onClose={handleClose} />
-//       <NewPopup open={newPopupOpen} onClose={handleNewPopupClose} />
-//       {selectedModel && (
-//         <ModelDetailsModal open={!!selectedModel} onClose={handleModalClose} model={selectedModel} />
-//       )}
-//     </Box>
-//   );
-// };
-
-// export default MainContent;
-
-// import { Box, Card, CardContent, Container, Grid, Typography } from '@mui/material';
-// import React, { useEffect, useState } from 'react';
-// import { auth, signInWithGoogle } from '../auth/config/firebase-config'; // import signInWithGoogle function
-// import PopUp from '../widgets/LoginPopUp';
-// import NewPopup from '../widgets/ServicesPopUp';
-// import ModelCard from './ModelCard'; // Import the ModelCard component
-// import ModelDetailsModal from './ModelDetailsModal';
-
-// const networks = [
-//   {
-//     name: 'Commune',
-//     description: 'Community-driven AI platform',
-//     icon: 'https://avatars.githubusercontent.com/u/107713514?v=4',
-//     comingSoon: false,
-//   },
-//   {
-//     name: 'Bittensor',
-//     description: 'Decentralized AI network',
-//     icon: 'https://bittensor.com/favicon.ico',
-//     comingSoon: true,
-//   },
-//   {
-//     name: 'Hugging Face',
-//     description: 'Open-source NLP models',
-//     icon: 'https://huggingface.co/favicon.ico',
-//     comingSoon: true,
-//   },
-//   {
-//     name: 'OpenAI',
-//     description: 'State-of-the-art language models',
-//     icon: 'https://openai.com/favicon.ico',
-//     comingSoon: true,
-//   },
-// ];
-
-// const models = [
-//   {
-//     name: 'GPT2 ',
-//     id: 'openai-community/gpt2',
-//     description: 'Text Generation',
-//     lastUsed: '3 hours ago',
-//     usageCount: '339k'
-//   },
-//   {
-//     name: 'GPT-2 Medium',
-//     id: 'openai-community/gpt2-medium',
-//     description: 'Text Generation',
-//     lastUsed: '5 days ago',
-//     usageCount: '48.5k'
-//   },
-//   {
-//     name: 'GPT-2 Large',
-//     id: 'openai-community/gpt2-large',
-//     description: 'Text Generation',
-//     lastUsed: '3 hours ago',
-//     usageCount: '17.7k'
-//   },
-//   {
-//     name: 'LLaMA-2 7B',
-//     id: 'openlm-research/open_llama_7b_v2',
-//     description: 'Text Generation',
-//     lastUsed: '3 hours ago',
-//     usageCount: '66.1k'
-//   },
-//   {
-//     name: 'LLaMA-2 13B',
-//     id: 'openlm-research/open_llama_13b',
-//     description: 'Text Generation',
-//     lastUsed: '17 days ago',
-//     usageCount: '121k'
-//   },
-//   {
-//     name: 'NousResearch llama2',
-//     id: 'NousResearch/Llama-2-7b-chat-hf',
-//     description: 'Text Generation',
-//     lastUsed: '5 days ago',
-//     usageCount: '616'
-//   },
-//   {
-//     name: 'OpenELM 270M',
-//     id: 'apple/OpenELM-270M',
-//     description: 'Text Generation',
-//     lastUsed: '21 hours ago',
-//     usageCount: '84.8k'
-//   },
-//   {
-//     name: 'OpenELM 450M',
-//     id: 'apple/OpenELM-450M',
-//     description: 'Text Generation',
-//     lastUsed: '4 days ago',
-//     usageCount: '3.47k'
-//   },
-//   {
-//     name: 'OpenELM 3B',
-//     id: 'apple/OpenELM-3B',
-//     description: 'Text Generation',
-//     lastUsed: '3 days ago',
-//     usageCount: '77.8k'
-//   },
-// ];
-
-// const MainContent = () => {
-//   const [user, setUser] = useState(null);
-//   const [open, setOpen] = useState(false);
-//   const [newPopupOpen, setNewPopupOpen] = useState(false);
-//   const [filter, setFilter] = useState('');
-//   const [selectedModel, setSelectedModel] = useState(null);
-
-//   useEffect(() => {
-//     const unsubscribe = auth.onAuthStateChanged(setUser);
-//     return () => unsubscribe();
-//   }, []);
-
-//   const handleGetStartedClick = () => {
-//     if (user) {
-//       setNewPopupOpen(true);
-//     } else {
-//       setOpen(true);
-//     }
-//   };
-
-//   const handleClose = () => {
-//     setOpen(false);
-//   };
-
-//   const handleNewPopupClose = () => {
-//     setNewPopupOpen(false);
-//   };
-
-//   const handleFilterChange = (event) => {
-//     setFilter(event.target.value);
-//   };
-
-//   const handleCardClick = (network) => {
-//     if (!network.comingSoon) {
-//       alert(`${network.name} Selected`);
-//     }
-//   };
-
-//   const handleModelCardClick = (model) => {
-//     if (!user) {
-//       signInWithGoogle().then((result) => {
-//         setUser(result);
-//         setSelectedModel(model);
-//       }).catch((error) => {
-//         console.error('Google sign-in error', error);
-//       });
-//     } else {
-//       setSelectedModel(model);
-//     }
-//   };
-
-//   const handleModalClose = () => {
-//     setSelectedModel(null);
-//   };
-
-//   const filteredModels = models.filter(model => model.name.toLowerCase().includes(filter.toLowerCase()));
-
-//   return (
-//     <Box className="min-h-screen bg-gray-100" sx={{ marginTop: "90px", marginBottom: "90px", minHeight: '80vh', display: 'flex', justifyContent: 'center', alignItems: 'center', width: '100%', flexDirection: 'column' }}>
-//       <Container maxWidth="lg">
-//         <Typography variant="h4" align="center" color="textPrimary" gutterBottom style={{ fontSize: '2.0rem', fontWeight: '700' }}>
-//           AI Model Fine-Tuning Hub
-//         </Typography>
-//         <Typography variant="h5" align="center" color="textSecondary" gutterBottom style={{ fontSize: '1.5rem', fontWeight: '700', marginBottom: '15px' }}>
-//           Available Networks
-//         </Typography>
-
-//         <Grid container spacing={4} justifyContent="center" alignItems="center">
-//           {networks.map((network, index) => (
-//             <Grid item xs={12} sm={6} md={3} key={network.name}>
-//               <Card
-//                 onClick={() => handleCardClick(network)}
-//                 sx={{
-//                   height: 200,
-//                   background: 'linear-gradient(135deg, #6e8efb, #a777e3)',
-//                   color: '#fff',
-//                   cursor: network.comingSoon ? 'default' : 'pointer',
-//                   position: 'relative',
-//                   '&:hover': {
-//                     transform: network.comingSoon ? 'none' : 'translateY(-5px)',
-//                     boxShadow: network.comingSoon ? 'none' : '0 6px 12px rgba(0, 0, 0, 0.15)',
-//                   },
-//                   filter: network.comingSoon ? 'brightness(50%)' : 'none',
-//                 }}
-//               >
-//                 <CardContent align="center">
-//                   {network.icon.startsWith('http') ? (
-//                     <img src={network.icon} alt={network.name} style={{ width: '80px', height: '80px', marginBottom: '10px' }} />
-//                   ) : (
-//                     <i className={`${network.icon} fa-6x mb-4`}></i>
-//                   )}
-//                   <Typography variant="h5" component="div">
-//                     {network.name}
-//                   </Typography>
-//                   <Typography variant="body2">
-//                     {network.description}
-//                   </Typography>
-//                   {network.comingSoon && (
-//                     <Typography variant="body2" style={{ color: '#ffd700', marginTop: '5px' }}>
-//                       Coming Soon
-//                     </Typography>
-//                   )}
-//                 </CardContent>
-//               </Card>
-//             </Grid>
-//           ))}
-//         </Grid>
-
-//         <Typography variant="h4" align="center" color="textPrimary" gutterBottom style={{ fontSize: '2.0rem', fontWeight: '700', marginTop: '50px' }}>
-//           Models
-//         </Typography>
-//         <Typography variant="h5" align="center" color="textSecondary" gutterBottom style={{ fontSize: '1.5rem', fontWeight: '700', marginBottom: '15px' }}>
-//           Select a model to fine-tune today...
-//         </Typography>
-
-//         <Grid container spacing={2} justifyContent="center" alignItems="center">
-//           {filteredModels.map((model) => (
-//             <Grid item xs={12} sm={6} md={4} lg={4} key={model.id}>
-//               <ModelCard model={model} onClick={() => handleModelCardClick(model)} /> {/* Use the reusable ModelCard component */}
-//             </Grid>
-//           ))}
-//         </Grid>
-//       </Container>
-
-//       <PopUp open={open} onClose={handleClose} />
-//       <NewPopup open={newPopupOpen} onClose={handleNewPopupClose} />
-//       {selectedModel && (
-//         <ModelDetailsModal open={!!selectedModel} onClose={handleModalClose} model={selectedModel} />
-//       )}
-//     </Box>
-//   );
-// };
-
-// export default MainContent;

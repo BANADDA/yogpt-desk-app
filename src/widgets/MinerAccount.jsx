@@ -67,7 +67,7 @@ const MinerAccount = () => {
   };
 
   return (
-    <Box sx={{ display: "flex", justifyContent: "space-between", p: 3 }}>
+    <Box container spacing={3} sx={{ display: "flex", justifyContent: "space-between",  }}>
       <Box component="main" sx={{ flexGrow: 1, mr: 3 }}>
         <Paper elevation={3} sx={{ p: 3 }}>
           <Typography variant="h5" sx={{ fontWeight: "bold", mb: 2 }}>
