@@ -1,10 +1,27 @@
 import { useEffect, useState } from "react";
-import { useLocation, useNavigate } from 'react-router-dom'; // Import HashRouter
+import { Route, Routes, useLocation, useNavigate } from 'react-router-dom';
+import { AuthProvider } from "./auth/AuthContext";
+import AuthModal from "./auth/AuthModal";
 import { auth } from "./auth/config/firebase-config";
+import DeployList from "./components/DashboardScreen";
+import Datasets from "./components/Datasets";
 import MainContent from "./components/MainContent";
 import Navbar from "./components/Navbar";
 import './index.css';
+import ChatLayout from "./screens/pages/chat/ChatLayout";
+import GuildelinesComponent from "./screens/pages/docs/GuidelinesComponent";
+import MinerDocumentation from './screens/pages/docs/MInerDocumentation';
+import ChatUI from "./screens/pages/llms/InferenceScreen";
+import LLMSScreen from "./screens/pages/llms/LLMSScreen";
+import ModelsScreen from "./screens/pages/llms/ModelScreen";
+import PaymentMenu from "./screens/pages/payment/menu";
+import Pricing from './screens/pages/pricing/Pricing';
+import TrainingJobs from "./screens/pages/trainer/jobs";
+import SignIn from "./screens/sign-in";
+import SignUp from "./screens/sign-up";
 import { Footer } from "./widgets/Footer";
+import Com from "./widgets/getCPUProgress";
+import UserInfoPopup from "./widgets/userInfo";
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -110,17 +127,50 @@ function App() {
   }, []);
 
   return (
-    <>
-      <Navbar
-        isDarkTheme={isDarkTheme}
-        themeSwitch={themeSwitch}
-        toggleMobileMenu={toggleMobileMenu}
-        isMobileMenuOpen={isMobileMenuOpen}
-        onProfileClick={toggleProfileWidget}
-      />
-      <MainContent handleExploreClick={handleExploreClick} />
-      <Footer />
-    </>
+    <AuthProvider>
+      <div className="flex flex-col">
+        <Routes>
+          <Route path="/" element={
+            <>
+              {showAuthModel && (
+                <AuthModal onClose={() => setShowAuthModel(false)} />
+              )}
+              {isProfileClicked && (
+                <UserInfoPopup
+                  onClose={() => setIsProfileClicked(false)}
+                  userName={user.name}
+                  userEmail={user.email}
+                  userPhotoURL={user.photoURL}
+                />
+              )}
+              <Navbar
+                isDarkTheme={isDarkTheme}
+                themeSwitch={themeSwitch}
+                toggleMobileMenu={toggleMobileMenu}
+                isMobileMenuOpen={isMobileMenuOpen}
+                onProfileClick={toggleProfileWidget}
+              />
+              <MainContent handleExploreClick={handleExploreClick} />
+              <Footer />
+            </>
+          } />
+          <Route path="/pricing" element={<Pricing />} />
+          <Route path="/miner-docs" element={<MinerDocumentation />} />
+          <Route path="/sign-in" element={<SignIn />} />
+          <Route path="/sign-up" element={<SignUp />} />
+          <Route path="/llms" element={<LLMSScreen />} />
+          <Route path="/dashboard" element={<DeployList />} />
+          <Route path="/jobs" element={<TrainingJobs />} />
+          <Route path="/models" element={<ModelsScreen />} />
+          <Route path="/inference:model" element={<ChatUI />} />
+          <Route path="/bill" element={<PaymentMenu />} />
+          <Route path="/chat/:url" element={<ChatLayout />} />
+          <Route path="/datasets" element={<Datasets />} />
+          <Route path="/com" element={<Com />} />
+          <Route path="/userdocs" element={<GuildelinesComponent />} />
+        </Routes>
+      </div>
+    </AuthProvider>
   );
 }
 

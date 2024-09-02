@@ -3,12 +3,10 @@ import { Box, Button, Card, CardContent, Grid, IconButton, Typography } from '@m
 import React from 'react';
 import { Cell, Pie, PieChart, ResponsiveContainer } from 'recharts';
 
-// Utility function to format numbers
-const formatNumber = (num) => {
-  if (num >= 1000) {
-    return (num / 1000).toFixed(1) + 'k';
-  }
-  return num.toString();
+// Utility function to format numbers to GB
+const formatToGB = (num) => {
+  const gbValue = num / (1024 ** 3); // Convert bytes to GB
+  return gbValue.toFixed(2) + ' GB'; // Format to two decimal places
 };
 
 // Reusable ResourcesOverviewCard Component
@@ -27,6 +25,11 @@ const ResourcesOverviewCard = ({
 }) => {
   // Calculate total if not passed as a prop
   const totalResources = totalValue !== undefined ? totalValue : activeValue + inactiveValue;
+
+  // Conditionally format values to GB if the title indicates memory usage
+  const formatValue = (value) => {
+    return title === "Miner Memory Usage Overview" ? formatToGB(value) : value.toLocaleString();
+  };
 
   const data = [
     { name: activeTitle, value: activeValue, color: '#00C49F' },
@@ -94,7 +97,7 @@ const ResourcesOverviewCard = ({
               </ResponsiveContainer>
               <Box sx={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }}>
                 <Typography variant="h6" sx={{ color: '#555', fontWeight: 'bold' }}>
-                  {formatNumber(totalResources)}
+                  {formatValue(totalResources)}
                 </Typography>
               </Box>
             </Box>
@@ -118,7 +121,7 @@ const ResourcesOverviewCard = ({
                   </Typography>
                 </Box>
                 <Typography variant="h7" sx={{ color: '#00C49F', textAlign: 'left' }}>
-                  {activeValue.toLocaleString()}
+                  {formatValue(activeValue)}
                 </Typography>
               </Grid>
               <Grid item xs={4}>
@@ -137,7 +140,7 @@ const ResourcesOverviewCard = ({
                   </Typography>
                 </Box>
                 <Typography variant="h7" sx={{ color: '#FF8042', textAlign: 'left' }}>
-                  {inactiveValue.toLocaleString()}
+                  {formatValue(inactiveValue)}
                 </Typography>
               </Grid>
               <Grid item xs={4}>
@@ -147,7 +150,7 @@ const ResourcesOverviewCard = ({
                   </Typography>
                 </Box>
                 <Typography variant="h7" sx={{ color: '#555', textAlign: 'left' }}>
-                  {totalResources.toLocaleString()}
+                  {formatValue(totalResources)}
                 </Typography>
               </Grid>
             </Grid>

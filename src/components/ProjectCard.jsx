@@ -3,7 +3,8 @@ import PowerSettingsNewIcon from '@mui/icons-material/PowerSettingsNew';
 import { Box, Button, Divider, Typography } from '@mui/material';
 import React from 'react';
 
-const ProjectCard = ({ user, commit, applications, programStatus, onToggleProgram }) => {
+const ProjectCard = ({ user, commit, applications, programStatus, onToggleProgram, onStartProgram }) => {
+
   const BlinkingDot = ({ color }) => (
     <Box display="flex" alignItems="center">
       <Box
@@ -26,6 +27,49 @@ const ProjectCard = ({ user, commit, applications, programStatus, onToggleProgra
       </Typography>
     </Box>
   );
+
+  const toggleProgramStatus = async () => {
+    if (programStatus === 'online') {
+      try {
+        const response = await fetch('http://localhost:3006/stop-program', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
+
+        const result = await response.text();
+        console.log("Server response:", result);
+
+        if (response.ok) {
+          console.log("Stop command sent successfully, waiting for WebSocket confirmation...");
+          // Wait for WebSocket confirmation before setting the status to offline
+        } else {
+          console.error('Failed to stop the program');
+        }
+      } catch (error) {
+        console.error(`Error stopping program: ${error.message}`);
+      }
+    } else {
+      onStartProgram();  // Open the start program modal
+    }
+  };
+
+  const handleButtonClick = () => {
+    console.log('Button clicked. Current programStatus:', programStatus);
+  
+    if (programStatus === 'offline') {
+      if (typeof onStartProgram === 'function') {
+        console.log('Starting program...');
+        onStartProgram();  // Trigger the modal to open and start the program
+      } else {
+        console.error('onStartProgram is not a function or was not passed correctly to ProjectCard.');
+      }
+    } else {
+      console.log('Stopping program...');
+      toggleProgramStatus();  // Trigger the program stop process
+    }
+  };      
 
   return (
     <Box
@@ -85,7 +129,7 @@ const ProjectCard = ({ user, commit, applications, programStatus, onToggleProgra
           <Button
             variant="outlined"
             startIcon={<PowerSettingsNewIcon />}
-            onClick={onToggleProgram}
+            onClick={handleButtonClick}
             sx={{
               borderColor: programStatus === 'online' ? '#FF1744' : '#00C49F',
               color: programStatus === 'online' ? '#FF1744' : '#00C49F',
